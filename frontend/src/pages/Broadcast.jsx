@@ -78,7 +78,7 @@ function Broadcast() {
 
 const startScreenSharing = async () => {
   try {
-    let newStream;
+    let newStream, audioStream;
 
     if (isScreenSharing) {
       // Switch back to webcam
@@ -90,35 +90,35 @@ const startScreenSharing = async () => {
       // Start screen sharing
       newStream = await navigator.mediaDevices.getDisplayMedia({
         video: true,
-        audio: true, // Some browsers don't support audio sharing
+        audio: { echoCancellation: true, noiseSuppression: true }, // Try forcing audio capture
       });
+
+      // Try capturing microphone separately (some browsers don't include it)
+      audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+      // Merge both streams (if audio exists)
+      if (audioStream) {
+        const [audioTrack] = audioStream.getAudioTracks();
+        if (audioTrack) newStream.addTrack(audioTrack);
+      }
     }
 
-    // Update the reference
+    // Update reference and UI
     streamRef.current = newStream;
     videoRef.current.srcObject = newStream;
 
-    // Replace tracks in each peer connection
+    // Replace tracks correctly
     Object.values(peerConnections.current).forEach((peerConnection) => {
-      const senders = peerConnection.getSenders();
-
-      // Replace video track
-      const newVideoTrack = newStream.getVideoTracks()[0];
-      const videoSender = senders.find(
-        (sender) => sender.track.kind === "video"
-      );
-      if (videoSender) {
-        videoSender.replaceTrack(newVideoTrack);
-      }
-
-      // Replace audio track if available
-      const newAudioTrack = newStream.getAudioTracks()[0];
-      const audioSender = senders.find(
-        (sender) => sender.track.kind === "audio"
-      );
-      if (audioSender && newAudioTrack) {
-        audioSender.replaceTrack(newAudioTrack);
-      }
+      peerConnection.getSenders().forEach((sender) => {
+        if (sender.track.kind === "video") {
+          sender.replaceTrack(newStream.getVideoTracks()[0]);
+        } else if (
+          sender.track.kind === "audio" &&
+          newStream.getAudioTracks().length > 0
+        ) {
+          sender.replaceTrack(newStream.getAudioTracks()[0]);
+        }
+      });
     });
 
     setIsScreenSharing(!isScreenSharing);
@@ -126,6 +126,7 @@ const startScreenSharing = async () => {
     console.error("❌ Screen sharing error:", err);
   }
 };
+
 
 
   const sendStreamToViewer = (viewerId) => {
