@@ -2,24 +2,30 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { io } from "socket.io-client";
 
-const socket = io("https://streamsync-v13p.onrender.com", {
-  transports: ["websocket"],
+const socket = io("http://localhost:9000", {
+  transports: ["websocket", "polling"],
 });
-
 
 function Watch() {
   const { streamId } = useParams();
   const navigate = useNavigate();
   const videoRef = useRef(null);
   const peerConnection = useRef(null);
-
+  const [streamTitle, setStreamTitle] = useState("Loading...");
   const [streamNotFound, setStreamNotFound] = useState(false);
   const [streamEnded, setStreamEnded] = useState(false);
-
+  const [viewers, setViewers] = useState(0);
   useEffect(() => {
     console.log(`🔗 Joining stream: ${streamId}`);
     socket.emit("watchStream", streamId);
-
+    socket.on("streamTitle", (title) => {
+      console.log("🎥 Stream Title:", title);
+      setStreamTitle(title);
+    });
+    socket.on("viewerCount", ({ streamId, viewers }) => {
+      console.log(`👀 Viewer count updated: ${viewers}`);
+      setViewers(viewers);
+    });
     socket.on("streamNotFound", () => {
       console.error("❌ Stream not found!");
       setStreamNotFound(true);
@@ -129,16 +135,20 @@ function Watch() {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-800 p-4">
-      <h1 className="text-3xl font-bold text-white mb-4">
-        Watching Live Stream
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white px-4">
+      <h1 className="text-3xl font-bold mb-4 text-center">
+        🎥 Watching Live Stream
       </h1>
+      <h2 className="text-xl text-gray-300">{streamTitle}</h2>
+      <p className="text-lg font-semibold">
+        👀 Viewers: <span className="text-green-400">{viewers}</span>
+      </p>
 
       {streamNotFound && (
-        <div className="text-center text-white">
-          <p className="text-lg mb-4 text-red-500">❌ Stream Not Found!</p>
+        <div className="text-center">
+          <p className="text-xl text-red-500">❌ Stream Not Found!</p>
           <button
-            className="bg-gray-600 text-white px-6 py-3 mt-4 rounded-lg hover:bg-gray-500 transition-all"
+            className="mt-4 px-6 py-3 bg-gray-700 rounded-lg hover:bg-gray-600 transition"
             onClick={() => navigate("/")}
           >
             Go Back
@@ -147,10 +157,10 @@ function Watch() {
       )}
 
       {streamEnded && (
-        <div className="text-center text-white">
-          <p className="text-lg mb-4 text-yellow-400">🛑 Stream has ended.</p>
+        <div className="text-center">
+          <p className="text-xl text-yellow-400">🛑 Stream has ended.</p>
           <button
-            className="bg-gray-600 text-white px-6 py-3 mt-4 rounded-lg hover:bg-gray-500 transition-all"
+            className="mt-4 px-6 py-3 bg-gray-700 rounded-lg hover:bg-gray-600 transition"
             onClick={() => navigate("/")}
           >
             Go Back
@@ -159,16 +169,16 @@ function Watch() {
       )}
 
       {!streamNotFound && !streamEnded && (
-        <div className="flex flex-col items-center justify-center w-full md:w-3/4 text-center">
+        <div className="flex flex-col items-center w-full md:w-3/4">
           <video
             ref={videoRef}
             autoPlay
             playsInline
-            className="border-2 border-gray-300 mb-4 w-full max-w-2xl"
             controls
+            className="w-full max-w-2xl border-4 border-gray-700 rounded-lg shadow-lg"
           />
           <button
-            className="bg-red-600 text-white px-6 py-3 mt-4 rounded-lg hover:bg-red-500 transition-all"
+            className="mt-6 px-6 py-3 bg-red-600 rounded-lg text-white font-semibold hover:bg-red-500 transition"
             onClick={leaveStream}
           >
             Leave Stream
