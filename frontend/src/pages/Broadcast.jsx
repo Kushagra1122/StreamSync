@@ -78,47 +78,52 @@ function Broadcast() {
 
 const startScreenSharing = async () => {
   try {
-    let newStream, audioStream;
+    let newStream;
 
     if (isScreenSharing) {
       // Switch back to webcam
       newStream = await navigator.mediaDevices.getUserMedia({
         video: true,
-        audio: true,
+        audio: true, // ✅ Get mic audio again
       });
     } else {
-      // Start screen sharing
+      // Start screen sharing (Disable screen audio capture)
       newStream = await navigator.mediaDevices.getDisplayMedia({
         video: true,
-        audio: { echoCancellation: true, noiseSuppression: true }, // Try forcing audio capture
+        audio: false, // ❌ Prevents duplicate audio issues
       });
 
-      // Try capturing microphone separately (some browsers don't include it)
-      audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
-      // Merge both streams (if audio exists)
-      if (audioStream) {
-        const [audioTrack] = audioStream.getAudioTracks();
-        if (audioTrack) newStream.addTrack(audioTrack);
-      }
+      // ✅ Add microphone audio manually
+      const audioStream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+      });
+      const audioTrack = audioStream.getAudioTracks()[0];
+      newStream.addTrack(audioTrack);
     }
 
-    // Update reference and UI
     streamRef.current = newStream;
     videoRef.current.srcObject = newStream;
 
-    // Replace tracks correctly
     Object.values(peerConnections.current).forEach((peerConnection) => {
-      peerConnection.getSenders().forEach((sender) => {
-        if (sender.track.kind === "video") {
-          sender.replaceTrack(newStream.getVideoTracks()[0]);
-        } else if (
-          sender.track.kind === "audio" &&
-          newStream.getAudioTracks().length > 0
-        ) {
-          sender.replaceTrack(newStream.getAudioTracks()[0]);
-        }
-      });
+      const senders = peerConnection.getSenders();
+
+      // Replace video track
+      const newVideoTrack = newStream.getVideoTracks()[0];
+      const videoSender = senders.find(
+        (sender) => sender.track?.kind === "video"
+      );
+      if (videoSender) videoSender.replaceTrack(newVideoTrack);
+
+      // Replace audio track if available
+      const newAudioTrack = newStream
+        .getAudioTracks()
+        .find((track) => track.kind === "audio");
+      const audioSender = senders.find(
+        (sender) => sender.track?.kind === "audio"
+      );
+      if (audioSender && newAudioTrack) {
+        audioSender.replaceTrack(newAudioTrack);
+      }
     });
 
     setIsScreenSharing(!isScreenSharing);
