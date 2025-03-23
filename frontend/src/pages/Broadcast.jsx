@@ -76,23 +76,57 @@ function Broadcast() {
     }
   };
 
-  const startScreenSharing = async () => {
-    try {
-      if (isScreenSharing) {
-        await startWebcam(); // Switch back to webcam
-      } else {
-        const screenStream = await navigator.mediaDevices.getDisplayMedia({
-          video: true,
-          audio: true,
-        });
-        streamRef.current = screenStream;
-        videoRef.current.srcObject = screenStream;
-      }
-      setIsScreenSharing(!isScreenSharing);
-    } catch (err) {
-      console.error("❌ Screen sharing error:", err);
+const startScreenSharing = async () => {
+  try {
+    let newStream;
+
+    if (isScreenSharing) {
+      // Switch back to webcam
+      newStream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: true,
+      });
+    } else {
+      // Start screen sharing
+      newStream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio: true, // Some browsers don't support audio sharing
+      });
     }
-  };
+
+    // Update the reference
+    streamRef.current = newStream;
+    videoRef.current.srcObject = newStream;
+
+    // Replace tracks in each peer connection
+    Object.values(peerConnections.current).forEach((peerConnection) => {
+      const senders = peerConnection.getSenders();
+
+      // Replace video track
+      const newVideoTrack = newStream.getVideoTracks()[0];
+      const videoSender = senders.find(
+        (sender) => sender.track.kind === "video"
+      );
+      if (videoSender) {
+        videoSender.replaceTrack(newVideoTrack);
+      }
+
+      // Replace audio track if available
+      const newAudioTrack = newStream.getAudioTracks()[0];
+      const audioSender = senders.find(
+        (sender) => sender.track.kind === "audio"
+      );
+      if (audioSender && newAudioTrack) {
+        audioSender.replaceTrack(newAudioTrack);
+      }
+    });
+
+    setIsScreenSharing(!isScreenSharing);
+  } catch (err) {
+    console.error("❌ Screen sharing error:", err);
+  }
+};
+
 
   const sendStreamToViewer = (viewerId) => {
     console.log(`✅ Sending stream to Viewer ${viewerId}`);
