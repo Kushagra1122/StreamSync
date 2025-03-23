@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { io } from "socket.io-client";
 
-const socket = io("http://localhost:9000");
+const socket = io("https://streamsync-v13p.onrender.com");
 
 function Broadcast() {
   const videoRef = useRef();
