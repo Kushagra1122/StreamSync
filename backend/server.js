@@ -9,14 +9,14 @@ const server = http.createServer(app);
 
 // Enable CORS for the server
 app.use(cors({
-    origin: ['https://streamsync25.netlify.app', 'http://localhost:5173'],
+    origin: 'https://streamsync25.netlify.app',
     methods: ['GET', 'POST'],
     credentials: true
 }));
 
 const io = new Server(server, {
     cors: {
-        origin: ['https://streamsync25.netlify.app', 'http://localhost:5173'],
+        origin: 'https://streamsync25.netlify.app',
         methods: ['GET', 'POST'],
         credentials: true
     }

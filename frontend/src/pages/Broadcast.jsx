@@ -21,7 +21,7 @@ function Broadcast() {
     socket.on("streamId", (id) => {
       console.log(`✅ Stream started with ID: ${id}`);
       setStreamId(id);
-      setShareableUrl(`https://streamsync-v13p.onrender.com/watch/${id}`);
+      setShareableUrl(`https://streamsync25.netlify.app/watch/${id}`);
     });
 
     socket.on("sendStream", ({ viewerId }) => {

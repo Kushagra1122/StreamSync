@@ -159,12 +159,12 @@ function Watch() {
       )}
 
       {!streamNotFound && !streamEnded && (
-        <div className="w-full md:w-3/4 text-center">
+        <div className="flex flex-col items-center justify-center w-full md:w-3/4 text-center">
           <video
             ref={videoRef}
             autoPlay
             playsInline
-            className="border-2 border-gray-300 mb-4"
+            className="border-2 border-gray-300 mb-4 w-full max-w-2xl"
             controls
           />
           <button
