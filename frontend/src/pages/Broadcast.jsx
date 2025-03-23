@@ -18,7 +18,7 @@ function Broadcast() {
     socket.on("streamId", (id) => {
       console.log(`✅ Stream started with ID: ${id}`);
       setStreamId(id);
-      setShareableUrl(`http://localhost:5173/watch/${id}`);
+      setShareableUrl(`https://streamsync-v13p.onrender.com/watch/${id}`);
     });
 
     socket.on("sendStream", ({ viewerId }) => {
