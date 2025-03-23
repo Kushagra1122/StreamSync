@@ -2,14 +2,24 @@ const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const { v4: uuidv4 } = require("uuid");
+const cors = require("cors");
 
 const app = express();
 const server = http.createServer(app);
+
+// Enable CORS for the server
+app.use(cors({
+    origin: 'https://streamsync25.netlify.app',
+    methods: ['GET', 'POST'],
+    credentials: true
+}));
+
 const io = new Server(server, {
     cors: {
-        origin: "https://streamsync25.netlify.app/", // Allow frontend
-        methods: ["GET", "POST"],
-    },
+        origin: 'https://streamsync25.netlify.app',
+        methods: ['GET', 'POST'],
+        credentials: true
+    }
 });
 
 const streams = {}; // Store active streams
