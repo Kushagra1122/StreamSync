@@ -9,7 +9,7 @@ const server = http.createServer(app);
 
 // Enable CORS
 app.use(cors({
-    origin: "http://localhost:5173",
+    origin: "http://streamsync25.netlify.app",
     methods: ["GET", "POST"],
     credentials: true
 }));
@@ -17,7 +17,7 @@ app.use(cors({
 // ✅ Proper Socket.IO CORS configuration
 const io = new Server(server, {
     cors: {
-        origin: "http://localhost:5173",
+        origin: "http://streamsync25.netlify.app",
         methods: ["GET", "POST"],
         credentials: true
     }
