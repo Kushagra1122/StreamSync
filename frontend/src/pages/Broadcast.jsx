@@ -1,61 +1,73 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { io } from "socket.io-client";
-
-const socket = io("https://streamsync-v13p.onrender.com", {
+import { useAuth } from "../context/authContext";
+import { FiCopy, FiMessageSquare, FiShare2, FiVideo, FiX } from "react-icons/fi";
+import { API_URL } from "../config/url";
+const socket = io(API_URL.BASE, {
   transports: ["websocket", "polling"],
 });
 
 function Broadcast() {
   const videoRef = useRef();
-  const [searchParams] = useSearchParams();
-  const streamTitle = searchParams.get("title") || "Live Stream";
-  const peerConnections = useRef({});
-  const [streamId, setStreamId] = useState(null);
-  const [isStreaming, setIsStreaming] = useState(true);
-  const [shareableUrl, setShareableUrl] = useState("");
   const streamRef = useRef(null);
+  const peerConnections = useRef({});
+  const chatContainerRef = useRef(null);
+  const [searchParams] = useSearchParams();
+
+  const { user } = useAuth();
+  const streamTitle = searchParams.get("title") || "Live Stream";
+  const [streamId, setStreamId] = useState(null);
+  const [shareableUrl, setShareableUrl] = useState("");
   const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(true);
   const [viewers, setViewers] = useState(0);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatInput, setChatInput] = useState("");
+  const [superChatNotification, setSuperChatNotification] = useState(null);
+
   useEffect(() => {
-    socket.emit("startStream", { title: streamTitle });
-    socket.on("viewerCount", ({ streamId, viewers }) => {
-      console.log(`👀 Viewer count updated: ${viewers}`);
-      setViewers(viewers);
-    });
+    socket.emit("startStream", { title: streamTitle, userName: user?.name });
 
     socket.on("streamId", (id) => {
-      console.log(`✅ Stream started with ID: ${id}`);
       setStreamId(id);
       setShareableUrl(id);
     });
 
+    socket.on("viewerCount", ({ viewers }) => {
+      setViewers(viewers);
+    });
+
     socket.on("sendStream", ({ viewerId }) => {
-      console.log(`📡 Viewer ${viewerId} requested stream.`);
-
-      if (!streamRef.current) {
-        console.error("❌ No stream available. Retrying in 1 second...");
-        setTimeout(() => {
-          if (streamRef.current) sendStreamToViewer(viewerId);
-        }, 1000);
-        return;
-      }
-
+      if (!streamRef.current)
+        return setTimeout(() => sendStreamToViewer(viewerId), 1000);
       sendStreamToViewer(viewerId);
     });
 
     socket.on("answer", ({ viewerId, answer }) => {
-      console.log(`📡 Received WebRTC answer from Viewer ${viewerId}`);
       peerConnections.current[viewerId]?.setRemoteDescription(
         new RTCSessionDescription(answer)
       );
     });
 
     socket.on("candidate", ({ viewerId, candidate }) => {
-      console.log(`📡 Received ICE Candidate from Viewer ${viewerId}`);
       peerConnections.current[viewerId]?.addIceCandidate(
         new RTCIceCandidate(candidate)
       );
+    });
+
+    socket.on("chatMessage", (message) => {
+      setChatMessages((prev) => [...prev, message]);
+      scrollChatToBottom();
+    });
+
+    socket.on("chatHistory", (history) => {
+      setChatMessages(history);
+    });
+
+    socket.on("superChatNotification", (message) => {
+      setSuperChatNotification(message);
+      setTimeout(() => setSuperChatNotification(null), 5000);
     });
 
     startWebcam();
@@ -65,109 +77,85 @@ function Broadcast() {
       socket.off("sendStream");
       socket.off("answer");
       socket.off("candidate");
+      socket.off("chatMessage");
+      socket.off("chatHistory");
+      socket.off("superChatNotification");
     };
   }, []);
 
+  const scrollChatToBottom = () => {
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTop =
+        chatContainerRef.current.scrollHeight;
+    }
+  };
+
   const startWebcam = async () => {
     try {
-      const userStream = await navigator.mediaDevices.getUserMedia({
-        video: true,
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: 1280, height: 720 },
         audio: true,
       });
-      streamRef.current = userStream; // ✅ Immediate update
-      videoRef.current.srcObject = userStream;
-      console.log("🎥 Webcam started successfully");
+      streamRef.current = stream;
+      videoRef.current.srcObject = stream;
     } catch (err) {
-      console.error("❌ Webcam access error:", err);
+      console.error("Webcam error:", err);
     }
   };
 
   const startScreenSharing = async () => {
     try {
       let newStream;
-
       if (isScreenSharing) {
-        // Stop screen sharing and switch back to webcam
         newStream = await navigator.mediaDevices.getUserMedia({
-          video: true,
-          audio: true, // Re-enable microphone audio
+          video: { width: 1280, height: 720 },
+          audio: true,
         });
       } else {
-        // Start screen sharing (without internal screen audio to prevent echo)
         const screenStream = await navigator.mediaDevices.getDisplayMedia({
-          video: true,
-          audio: false, // Prevents capturing internal screen audio
+          video: { width: 1280, height: 720 },
         });
-
-        // Capture microphone separately
         const micStream = await navigator.mediaDevices.getUserMedia({
           audio: true,
         });
-
-        // Merge audio (mic) with video (screen)
-        const newAudioTrack = micStream.getAudioTracks()[0];
-        screenStream.addTrack(newAudioTrack);
-
+        screenStream.addTrack(micStream.getAudioTracks()[0]);
         newStream = screenStream;
       }
 
-      // Assign new stream to the video element
       streamRef.current = newStream;
       videoRef.current.srcObject = newStream;
 
-      // Replace tracks in all peer connections
-      Object.values(peerConnections.current).forEach((peerConnection) => {
-        const senders = peerConnection.getSenders();
-
-        // Replace video track
-        const newVideoTrack = newStream.getVideoTracks()[0];
-        const videoSender = senders.find(
-          (sender) => sender.track?.kind === "video"
-        );
-        if (videoSender) videoSender.replaceTrack(newVideoTrack);
-
-        // Replace audio track correctly
-        const newAudioTrack = newStream
-          .getAudioTracks()
-          .find((track) => track.kind === "audio");
-        const audioSender = senders.find(
-          (sender) => sender.track?.kind === "audio"
-        );
-
-        if (audioSender && newAudioTrack) {
-          audioSender.replaceTrack(newAudioTrack);
-        }
+      Object.values(peerConnections.current).forEach((pc) => {
+        const videoSender = pc
+          .getSenders()
+          .find((s) => s.track?.kind === "video");
+        const audioSender = pc
+          .getSenders()
+          .find((s) => s.track?.kind === "audio");
+        if (videoSender)
+          videoSender.replaceTrack(newStream.getVideoTracks()[0]);
+        if (audioSender)
+          audioSender.replaceTrack(newStream.getAudioTracks()[0]);
       });
 
       setIsScreenSharing(!isScreenSharing);
     } catch (err) {
-      console.error("❌ Screen sharing error:", err);
+      console.error("Screen sharing error:", err);
     }
   };
 
   const sendStreamToViewer = (viewerId) => {
-    console.log(`✅ Sending stream to Viewer ${viewerId}`);
-
-    if (!streamRef.current) {
-      console.error("❌ Stream not available.");
-      return;
-    }
-
-    const peerConnection = new RTCPeerConnection({
+    const pc = new RTCPeerConnection({
       iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
     });
+    peerConnections.current[viewerId] = pc;
 
-    peerConnections.current[viewerId] = peerConnection;
-
-    // Add tracks from `streamRef.current`
     streamRef.current.getTracks().forEach((track) => {
-      console.log("🎥 Adding track to connection:", track);
-      peerConnection.addTrack(track, streamRef.current);
+      pc.addTrack(track, streamRef.current);
     });
 
-    peerConnection.onicecandidate = (event) => {
+    pc.onicecandidate = (event) => {
       if (event.candidate) {
-        console.log("📡 Broadcasting ICE Candidate:", event.candidate);
         socket.emit("candidate", {
           streamId,
           candidate: event.candidate,
@@ -176,94 +164,234 @@ function Broadcast() {
       }
     };
 
-    peerConnection
-      .createOffer()
-      .then((offer) => {
-        console.log("📤 Sending WebRTC Offer to Viewer");
-        return peerConnection.setLocalDescription(offer);
-      })
+    pc.createOffer()
+      .then((offer) => pc.setLocalDescription(offer))
       .then(() => {
         socket.emit("offer", {
           streamId,
-          offer: peerConnection.localDescription,
+          offer: pc.localDescription,
           viewerId,
         });
       })
-      .catch((error) => console.error("❌ WebRTC Offer Error:", error));
+      .catch(console.error);
   };
 
   const stopStream = () => {
     socket.emit("stopStream", streamId);
     setIsStreaming(false);
-    console.log(`🛑 Stopped stream: ${streamId}`);
+    streamRef.current?.getTracks().forEach((track) => track.stop());
   };
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(shareableUrl);
-    alert("📋 Link copied to clipboard!");
+    alert("Stream URL copied to clipboard!");
+  };
+
+  const sendMessage = () => {
+    if (!chatInput.trim() || !streamId) return;
+    socket.emit("chatMessage", {
+      streamId,
+      user: user?.name || "Host",
+      message: chatInput.trim(),
+      isSuper: false,
+      amount: 0,
+      timestamp: Date.now(),
+    });
+    setChatInput("");
   };
 
   return (
-    <div className="flex flex-col items-center min-h-screen p-6 bg-gradient-to-br from-gray-900 via-gray-800 to-gray-700 text-white space-y-6">
-      <h1 className="text-4xl font-bold animate-fadeIn">
-        🎥 Broadcasting Live
-      </h1>
-      <h2 className="text-xl text-gray-300">{streamTitle}</h2>
-      <p className="text-lg font-semibold">
-        👀 Viewers: <span className="text-green-400">{viewers}</span>
-      </p>
-
-      {isStreaming && (
-        <>
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            className="w-11/12 max-w-3xl border-4 border-gray-700 rounded-lg shadow-xl my-4"
-            muted
-          />
-          <div className="flex flex-wrap gap-4">
-            <button
-              onClick={stopStream}
-              className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg shadow-lg transition-transform transform hover:scale-105"
-            >
-              ⛔ Stop Stream
-            </button>
-            <button
-              onClick={startScreenSharing}
-              className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg shadow-lg transition-transform transform hover:scale-105"
-            >
-              {isScreenSharing ? "🛑 Stop Sharing" : "📡 Share Screen"}
-            </button>
+    <div className="min-h-screen bg-gray-950 text-white">
+      {/* Super Chat Notification */}
+      {superChatNotification && (
+        <div className="fixed top-4 right-4 bg-gradient-to-r from-yellow-500 to-yellow-600 text-black p-4 rounded-xl shadow-lg z-50 animate-bounce max-w-xs border-2 border-yellow-300">
+          <div className="font-bold flex items-center gap-2">
+            <span className="text-lg">💰</span>
+            <span>SUPER CHAT!</span>
           </div>
-        </>
+          <div className="mt-1 text-sm">
+            <span className="font-semibold">{superChatNotification.user}</span>:{" "}
+            {superChatNotification.message}
+          </div>
+          <div className="text-xs font-bold text-yellow-900 mt-1">
+            ₹{superChatNotification.amount}
+          </div>
+        </div>
       )}
 
-      {!isStreaming && (
-        <p className="text-red-400 text-lg mt-4 font-semibold">
-          Stream has ended.
-        </p>
-      )}
+      <div className="container mx-auto px-4 py-6">
+        <div className="flex flex-col lg:flex-row gap-6">
+          {/* Main Stream Area */}
+          <div className="lg:w-2/3">
+            <div className="bg-gray-900 rounded-xl p-4 shadow-lg border border-gray-800">
+              {/* Stream Header */}
+              <div className="flex justify-between items-center mb-4">
+                <div>
+                  <h1 className="text-xl font-bold">{streamTitle}</h1>
+                  <p className="text-sm text-gray-400">
+                    Streaming as {user?.name || "Host"}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="bg-red-500 text-white px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1">
+                    <span className="w-2 h-2 bg-white rounded-full animate-pulse"></span>
+                    LIVE
+                  </span>
+                  <span className="bg-gray-800 px-3 py-1 rounded-full text-xs flex items-center gap-1">
+                    <FiVideo className="text-gray-400" size={14} />
+                    {viewers} viewers
+                  </span>
+                </div>
+              </div>
 
-      <div className="mt-6 w-full max-w-lg bg-gray-100 p-4 rounded-lg shadow-lg text-center text-gray-900">
-        <p className="mb-2 font-semibold">📎 Share this Stream Id:</p>
-        <div className="flex items-center bg-white border rounded-lg overflow-hidden shadow-md">
-          <input
-            type="text"
-            value={shareableUrl || "Waiting for Stream ID..."}
-            readOnly
-            className="w-full px-3 py-2 text-center bg-gray-50 text-gray-800"
-          />
-          <button
-            onClick={copyToClipboard}
-            className="bg-green-500 hover:bg-green-600 text-white px-4 py-2"
-          >
-            📋 Copy
-          </button>
+              {/* Video Player */}
+              {isStreaming ? (
+                <>
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="w-full aspect-video bg-black rounded-lg border border-gray-800"
+                  />
+                  {/* Stream Controls */}
+                  <div className="flex flex-wrap gap-3 mt-4">
+                    <button
+                      onClick={stopStream}
+                      className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg flex items-center gap-2 transition text-sm font-medium"
+                    >
+                      <FiX size={16} />
+                      End Stream
+                    </button>
+                    <button
+                      onClick={startScreenSharing}
+                      className={`px-4 py-2 rounded-lg flex items-center gap-2 transition text-sm font-medium ${
+                        isScreenSharing
+                          ? "bg-gray-700 hover:bg-gray-600"
+                          : "bg-indigo-600 hover:bg-indigo-700"
+                      }`}
+                    >
+                      <FiShare2 size={16} />
+                      {isScreenSharing ? "Stop Sharing" : "Share Screen"}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="bg-gray-800 aspect-video flex items-center justify-center rounded-lg border border-gray-700">
+                  <div className="text-center p-6">
+                    <p className="text-xl font-medium mb-2">Stream has ended</p>
+                    <p className="text-gray-400 text-sm">
+                      Thank you for streaming with StreamSync
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Share URL Section */}
+              <div className="mt-6">
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Share this stream URL
+                </label>
+                <div className="flex">
+                  <input
+                    type="text"
+                    value={shareableUrl || "Generating stream URL..."}
+                    readOnly
+                    className="flex-grow bg-gray-800 border border-gray-700 rounded-l-lg px-4 py-2 text-sm text-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  />
+                  <button
+                    onClick={copyToClipboard}
+                    className="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-r-lg flex items-center gap-1 text-sm font-medium"
+                  >
+                    <FiCopy size={16} />
+                    Copy
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Chat Section */}
+          <div className="lg:w-1/3">
+            <div className="bg-gray-900 rounded-xl p-4 shadow-lg border border-gray-800 h-full flex flex-col">
+              <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
+                <FiMessageSquare className="text-indigo-400" />
+                Live Chat
+              </h2>
+
+              {/* Chat Messages */}
+              <div
+                ref={chatContainerRef}
+                className="flex-grow overflow-y-auto mb-4 space-y-3 pr-2 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-gray-800"
+              >
+                {chatMessages.map((msg, i) => (
+                  <div
+                    key={i}
+                    className={`p-3 rounded-lg ${
+                      msg.isSuper
+                        ? "bg-gradient-to-r from-yellow-500/10 to-yellow-600/10 border-l-2 border-yellow-400"
+                        : "bg-gray-800"
+                    }`}
+                  >
+                    <div className="flex justify-between items-start">
+                      <span
+                        className={`font-medium text-sm ${
+                          msg.isSuper ? "text-yellow-300" : "text-indigo-300"
+                        }`}
+                      >
+                        {msg.user}
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        {msg.timestamp
+                          ? new Date(msg.timestamp).toLocaleTimeString([], {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })
+                          : ""}
+                      </span>
+                    </div>
+
+                    {msg.isSuper && (
+                      <div className="text-xs font-semibold text-yellow-300 mt-1">
+                        💰 SUPER CHAT — ₹{msg.amount}
+                      </div>
+                    )}
+
+                    <p
+                      className={`mt-1 text-sm ${
+                        msg.isSuper ? "text-yellow-200" : "text-gray-200"
+                      }`}
+                    >
+                      {msg.message}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Chat Input */}
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+                  className="flex-grow bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  placeholder="Type a message..."
+                />
+                <button
+                  onClick={sendMessage}
+                  className="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg text-sm font-medium"
+                >
+                  Send
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
   );
 }
+
 
 export default Broadcast;

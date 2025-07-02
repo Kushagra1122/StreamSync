@@ -1,91 +1,146 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { registerUser } from "../api"; // Import API function
+import { useAuth } from "../context/authContext";
+import { FiUser, FiMail, FiLock, FiUserPlus } from "react-icons/fi";
 
-const Register = () => {
+export default function Register() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+
   const navigate = useNavigate();
+  const { register } = useAuth();
 
   const handleRegister = async (e) => {
     e.preventDefault();
-    setMessage("");
+    setError("");
+    setIsLoading(true);
 
     try {
-      const response = await registerUser({ name, email, password });
-      setMessage("Registration successful! Redirecting to login...");
-
-      // Redirect to login after 2 seconds
-      setTimeout(() => navigate("/login"), 2000);
-    } catch (error) {
-      setMessage(error.response?.data?.message || "Registration failed.");
+      await register({ name, email, password });
+      navigate("/login");
+    } catch (err) {
+      setError(err.message || "Registration failed");
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
-    <div className="flex flex-col items-center justify-center h-screen bg-gray-900 text-white px-6">
-      <h2 className="text-3xl font-bold mb-6">Register</h2>
+    <div className="min-h-screen bg-gray-900 flex items-center justify-center px-4">
+      <div className="w-full max-w-md">
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-bold text-white mb-2">
+            Create your account
+          </h1>
+          <p className="text-gray-400">Join our platform today</p>
+        </div>
 
-      <form
-        onSubmit={handleRegister}
-        className="bg-gray-800 p-8 rounded-lg shadow-xl border border-gray-700 max-w-md w-full flex flex-col space-y-4"
-      >
-        {/* Name Input */}
-        <input
-          type="text"
-          placeholder="Full Name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          required
-          className="w-full p-3 text-gray-900 bg-gray-100 border border-gray-500 rounded-lg outline-none"
-        />
+        <div className="bg-gray-800 rounded-xl shadow-xl border border-gray-700 p-8">
+          {error && (
+            <div className="mb-6 bg-red-500/10 border border-red-500/30 text-red-300 px-4 py-3 rounded-lg text-sm">
+              {error}
+            </div>
+          )}
 
-        {/* Email Input */}
-        <input
-          type="email"
-          placeholder="Email Address"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-          className="w-full p-3 text-gray-900 bg-gray-100 border border-gray-500 rounded-lg outline-none"
-        />
+          <form onSubmit={handleRegister} className="space-y-6">
+            <div>
+              <label
+                htmlFor="name"
+                className="block text-sm font-medium text-gray-300 mb-1"
+              >
+                Full Name
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <FiUser className="h-5 w-5 text-gray-400" />
+                </div>
+                <input
+                  id="name"
+                  type="text"
+                  placeholder="John Doe"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                  className="block w-full pl-10 pr-3 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                />
+              </div>
+            </div>
 
-        {/* Password Input */}
-        <input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-          className="w-full p-3 text-gray-900 bg-gray-100 border border-gray-500 rounded-lg outline-none"
-        />
+            <div>
+              <label
+                htmlFor="email"
+                className="block text-sm font-medium text-gray-300 mb-1"
+              >
+                Email Address
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <FiMail className="h-5 w-5 text-gray-400" />
+                </div>
+                <input
+                  id="email"
+                  type="email"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  className="block w-full pl-10 pr-3 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                />
+              </div>
+            </div>
 
-        {/* Register Button */}
-        <button
-          type="submit"
-          className="w-full py-3 text-lg font-semibold text-white bg-green-600 hover:bg-green-700 rounded-lg transition-all duration-300"
-        >
-          Register
-        </button>
+            <div>
+              <label
+                htmlFor="password"
+                className="block text-sm font-medium text-gray-300 mb-1"
+              >
+                Password
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <FiLock className="h-5 w-5 text-gray-400" />
+                </div>
+                <input
+                  id="password"
+                  type="password"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  className="block w-full pl-10 pr-3 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                />
+              </div>
+            </div>
 
-        {/* Message Display */}
-        {message && <p className="text-sm text-center mt-2">{message}</p>}
+            <button
+              type="submit"
+              disabled={isLoading}
+              className={`w-full py-3 px-4 rounded-lg font-medium text-white transition-colors flex items-center justify-center ${
+                isLoading
+                  ? "bg-indigo-600/50 cursor-not-allowed"
+                  : "bg-indigo-600 hover:bg-indigo-700"
+              }`}
+            >
+              <FiUserPlus className="mr-2 h-5 w-5" />
+              {isLoading ? "Creating account..." : "Create Account"}
+            </button>
+          </form>
 
-        {/* Redirect to Login */}
-        <p className="text-center text-gray-400 text-sm mt-2">
-          Already have an account?{" "}
-          <span
-            className="text-blue-400 cursor-pointer hover:underline"
-            onClick={() => navigate("/login")}
-          >
-            Login here
-          </span>
-        </p>
-      </form>
+          <div className="mt-6 text-center text-sm text-gray-400">
+            Already have an account?{" "}
+            <button
+              onClick={() => navigate("/login")}
+              className="text-indigo-400 hover:text-indigo-300 font-medium focus:outline-none"
+            >
+              Sign in
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
 
-export default Register;
