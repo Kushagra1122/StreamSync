@@ -1,6 +1,6 @@
 // src/config/url.js
 
-const BASE_URL = 'http://localhost:9000';
+const BASE_URL = 'https://streamsync-v13p.onrender.com/';
 
 export const API_URL = {
     // Base URL

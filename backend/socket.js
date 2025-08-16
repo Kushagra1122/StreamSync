@@ -6,7 +6,7 @@ const streams = {}; // In-memory store for active streams
 function setupSocket(server) {
     const io = new Server(server, {
         cors: {
-            origin: process.env.CLIENT_URL || "http://localhost:5173",
+            origin: "*",
             methods: ["GET", "POST"],
             credentials: true,
         },
