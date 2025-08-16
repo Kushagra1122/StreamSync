@@ -1,6 +1,6 @@
 // src/config/url.js
 
-const BASE_URL = 'https://streamsync-v13p.onrender.com/';
+const BASE_URL = 'https://streamsync-rd2d.onrender.com/';
 
 export const API_URL = {
     // Base URL

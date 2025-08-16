@@ -37,7 +37,7 @@ export default function Navbar() {
     debounce(async (query) => {
       try {
         const res = await fetch(
-          `http://localhost:9000/api/user/search?q=${encodeURIComponent(
+          `https://streamsync-rd2d.onrender.com/user/search?q=${encodeURIComponent(
             query
           )}`,
           {
